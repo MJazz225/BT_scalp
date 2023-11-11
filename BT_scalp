@@ -1,7 +1,7 @@
 ###########################
 #
 #         BT報表
-#         2023/11/7 更新
+#         2023/10/30 更新
 #
 #         每個產品的PNL(包括手續費, 利息, profit, 不包括資金費率)
 #         剝頭皮交易（5分鐘）
@@ -17,15 +17,15 @@ setwd("D:\\Users\\marshaw.tan\\Downloads") #Company
 
 library(readxl)
 library(dplyr)
-library(openxlsx)
-############################################### 設定參數 ############################################################################
+############################################### 先選擇參數 ############################################################################
+scalping_count <- 2 ##剝頭皮次數 
+profit <- 100 #最小盈利
+position_holding_time <- 5 #持倉最多要多少分鐘？
+scalping_value <-  0.2#剝頭皮比率, 剝頭皮占交易次數
 
-profit <- 300 #篩選客戶盈利
-
-############################################### 載入交易報表 ############################################################################
+############################################### 載入資料 ############################################################################
 
 # 选择文件并返回文件路径
-"值班交易報表:"
 file_path <- file.choose()
 
 # 检查是否选择了文件
@@ -43,20 +43,21 @@ if (!is.null(file_path)) {
   cat("未选择文件。\n")
 }
 
+library(readxl)
 data1 <- readxl::read_excel(file_path)
 
 ############################################### 處理資料 ############################################################################
+
 colnames1 <- data1[1,]
 
 rawdata <- data1
 n <- nrow(rawdata)-1 ##刪掉最後一列的total
 data <- rawdata[2:n,]
 colnames(data) <- colnames1 #要提取ID, TRADEPAIR, 
-data1 <- data[,c("統一帳號\nmaster a/c", "產品合約\nsymbol",  "成交價格\ndeal price","成交手數\ndeal lot" , "成交時間\ndeal time", "帳戶貨幣\na/c currency", "傭金\ncommission" , "利息\nswaps",
+data1 <- data[,c("統一帳號\nmaster a/c", "產品合約\nsymbol",  "成交價格\ndeal price","成交手數\ndeal lot" , "成交時間\ndeal time", "傭金\ncommission" , "利息\nswaps",
                  "盈虧\np/l", "\n開倉價格\nopen price\n" , "\n開倉手數\nopen volume\n", "開倉時間\nopen time\n"   )]
 
 rm(rawdata)
-
 ##抓重要欄位
 #data1 <- as.data.frame(data[,c(2,5,17,18,21,23,24,27,28,29,34,35,36)]) #BO報表更新的話欄位可能會變動
 '上面數字對應的BO欄位名稱:
@@ -74,12 +75,9 @@ rm(rawdata)
 '
 #colnames(data1) <- columnnames
 
-
-############################################### 計算每筆交易的盈利 ############################################################################
-
 data1$`盈虧
 p/l`[is.na(data1$`盈虧
-p/l`)] <- 0 ##把盈虧欄位的NA值轉成0
+p/l`)] <- 0
 
 ## count sum
 data1 <- as.data.frame(data1)
@@ -88,265 +86,166 @@ profit1 <- as.numeric(data1$"傭金\ncommission")+as.numeric(data1$"利息\nswap
 SUM <- profit1
 rm(profit1)
 
-data1 <- cbind(data1[,c(1:9)],SUM,data1[,c(10:12)])
+data1 <- cbind(data1[,c(1:8)],SUM,data1[,c(9:11)])
 data1 <- data1[nrow(data1):1,] #因為資料是時間倒敘
 rm(SUM)
 data1 <- na.omit(data1)
+#id_list <- split(data1, f = data1[,1]) #換list
+#symbol_list <- split(data1, f = data1[,2]) #換list
 
-####文字拆解, 只留下產品的名字
-data_symbol <- data1$`產品合約
-symbol`
-# 使用lapply()函数提取最后一个部分
-last_parts <- lapply(data_symbol, function(x) tail(unlist(strsplit(x, "/")), 1))
-# 将结果转换为字符向量
-last_parts <- as.character(last_parts) %>% as.data.frame()
-data1 <- cbind(data1[,1],last_parts,data1[,c(3:ncol(data1))])
-colnames(data1) <- c("統一帳號\nmaster a/c", "產品合約\nsymbol",  "成交價格\ndeal price","成交手數\ndeal lot" , "成交時間\ndeal time", "帳戶貨幣\na/c currency", "傭金\ncommission" , "利息\nswaps",
-                     "盈虧\np/l", "SUM","\n開倉價格\nopen price\n" , "\n開倉手數\nopen volume\n", "開倉時間\nopen time\n")
+starttime = data1[1,5]
+endtime = data1[nrow(data1),5]
+starttime
+endtime
 
-############################################### 計算產品盈利 ############################################################################
+#交易資料内的交易對
+symboldata <- unique(data1$交易對tradePair) %>% sort(decreasing = FALSE) %>% as.data.frame()
 
-list_data1 <- split(data1, f = data1$`產品合約
-symbol`)
-sum_symbol <- NULL
+'sum1 <- data.frame()
+for (i in length(symbol_list)) {
+  temdata <- as.data.frame(temdata)
+  sum1 <- rbind(sum1, temdata)
+}'
 
-for (i in 1:length(list_data1)) {
+#找到持倉時間
+data_without_open <- na.omit(data1) #去掉開倉資料
+data_without_open$`成交時間
+deal time` <- as.POSIXlt(data_without_open$`成交時間
+deal time`)
+
+data_without_open$`開倉時間
+open time
+` <- as.POSIXlt(data_without_open$`開倉時間
+open time
+`)
+
+time_different <- difftime(data_without_open[,5], data_without_open[,12], unit = ("mins")) %>% as.data.frame()
+data_without_open <- cbind(data_without_open, time_different)
+rm(time_different)
+colnames(data_without_open)[colnames(data_without_open) == "."] <- "持倉時間"
+
+#設定1，0bool找出5分鐘内交易
+time_bool <- NULL
+time_bool <- ifelse(data_without_open[,13]<position_holding_time, 1, 0)
+
+time_bool <- time_bool %>% as.data.frame()
+data_without_open <- cbind(data_without_open, time_bool)
+data_without_open$SUM <- as.numeric(data_without_open$SUM)
+rm(time_bool)
+
+data2 <- data_without_open
+#data2 <- data_without_open %>% filter(SUM >0) #只看正盈利
+
+rm(data_without_open)
+colnames(data2)[colnames(data2) == "."] <- "5分鐘持倉布林"
+##還沒找出每個賬戶的交易次數和剝頭皮次數
+data2_list <- split(data2, f = data2$`統一帳號
+master a/c`)
+
+###################################################### 找出交易報表內盈利的客戶 ##############################################################
+
+##得出每個交易帳戶的盈利
+temsumdata1 <- NULL
+for (i in 1:length(data2_list)) {
   
-  cat(i, "/", length(list_data1), "\n")
+  cat(i, "/", length(data2_list), "\n")
   
-  tem <- list_data1[[i]]
-  tem1 <- cbind(tem[1,2],sum(tem$SUM))
-  sum_symbol <- rbind(sum_symbol, tem1)
+  
+  tem <- data2_list[[i]] 
+  temid <- tem[1,1]
+  temsum <- sum(tem$SUM)
+  temdata <- cbind(temid,temsum)
+  temsumdata1 <- rbind(temsumdata1, temdata)
 }
-colnames(sum_symbol) <- c("交易品種", "總盈利")
-sum_symbol <- as.data.frame(sum_symbol)
-sum_symbol[,2] <- as.numeric(sum_symbol[,2]) %>% round(digits = 2)
-sum_symbol <- sum_symbol[order(sum_symbol[,2], decreasing = T),]  
+temsumdata1 <- as.data.frame(temsumdata1)
+rm(tem)
+rm(temdata)
 
-total_sum <- sum(sum_symbol[,2])
-total_sum <- c("Total", total_sum)
-sum_symbol <- sum_symbol[sum_symbol[,2]>0,]
-sum_symbol <- rbind(sum_symbol, total_sum)
+temsumdata1[,2] <- as.numeric(temsumdata1[,2]) #總和要數字
+temsumdata1 <- temsumdata1[order(temsumdata1[,1]),]
 
+##得出每個交易帳戶的交易次數
+temdata <- NULL
+temdata1 <- NULL
+for (i in 1:length(data2_list)) {
+  
+  cat(i, "/", length(data2_list), "\n")
+  
+  tem <- data2_list[[i]]
+  n <- nrow(tem)
+  temdata <- cbind(tem[1,1], n)
+  temdata1 <- rbind(temdata1, temdata)
+}
+temdata1 <- as.data.frame(temdata1)
+data_tradingcount <- temdata1
+rm(temdata)
+rm(temdata1)
+colnames(data_tradingcount) <- c("ID", "交易次數")
+
+##得出每個交易帳戶的剝頭皮次數
+data_scalp <- data2 %>% filter(data2[,14] == 1)  #持倉5分鐘内
+list_scalp <- split(data_scalp, f = data_scalp$`統一帳號
+master a/c`)
+
+temdata <- NULL
+temdata1 <- NULL
+for (i in 1:length(list_scalp)) {
+  
+  cat(i, "/", length(list_scalp), "\n")
+  
+  tem <- list_scalp[[i]]
+  n <- nrow(tem)
+  temdata <- cbind(tem[1,1], n)
+  temdata1 <- rbind(temdata1, temdata)
+}
+temdata1 <- as.data.frame(temdata1)
+data_scalp1 <- temdata1
+rm(temdata)
+rm(temdata1)
+rm(tem)
+colnames(data_scalp1) <- c("ID", "剝頭皮次數")
+
+
+################################# 合并交易次數和剝頭皮次數 ##################################################
+id_scalp <- c(data_scalp1[,1])
+filter_tradingcount_scalp <- subset(data_tradingcount, ID %in% id_scalp)
+filter_tradingcount_scalp <- cbind(filter_tradingcount_scalp, data_scalp1)
+check1 <- as.numeric(filter_tradingcount_scalp[,1]) - as.numeric(filter_tradingcount_scalp[,3]) #檢查是不是都一樣
+check1
+rm(data_tradingcount)
+rm(data_scalp1)
+filter_tradingcount_scalp <- filter_tradingcount_scalp[,-3]
+scalp_percent <- as.numeric(filter_tradingcount_scalp[,3])/as.numeric(filter_tradingcount_scalp[,2]) %>% as.data.frame() ##算出剝頭皮比率
+# 将数值转换为百分比并保留一位小数
+scalp_percent <- sprintf("%.2f%%", scalp_percent[,1] * 100) %>% as.data.frame()
+filter_tradingcount_scalp <- cbind(filter_tradingcount_scalp, scalp_percent)
+
+temsumdata <- subset(temsumdata1, temid %in% id_scalp)
+filter_tradingcount_scalp <- cbind(filter_tradingcount_scalp, temsumdata)
+check1 <- as.numeric(filter_tradingcount_scalp[,1]) - as.numeric(filter_tradingcount_scalp[,5]) #檢查是不是都一樣
+check1
+rm(temsumdata)
+filter_tradingcount_scalp <- filter_tradingcount_scalp[,-5]
+colnames(filter_tradingcount_scalp) <- c("ID",  "交易次數", "剝頭皮次數","剝頭皮交易比率", "盈利")
+filter_tradingcount_scalp <- filter_tradingcount_scalp[filter_tradingcount_scalp[,3]>scalping_count,] ##剝頭皮次數大於2
+filter_tradingcount_scalp <- filter_tradingcount_scalp[filter_tradingcount_scalp[,5]>profit,] ##盈利大於0
+filter_tradingcount_scalp <- filter_tradingcount_scalp[filter_tradingcount_scalp[,4]>scalping_value,] ##剝頭皮比率大於0.2
+filter_tradingcount_scalp <- filter_tradingcount_scalp[order(filter_tradingcount_scalp$盈利, decreasing = T),]
+filter_tradingcount_scalp[,5] <- round(filter_tradingcount_scalp[,5], digits = 2)
+
+library(openxlsx)
 
 # 寫入excel
-file_path1 <- "D:\\Users\\marshaw.tan\\Downloads\\BT_產品盈利.xlsx"
+file_path <- "D:\\Users\\marshaw.tan\\Downloads\\BT_剝頭皮.xlsx"
 #file_path <- setwd("C:\\Users\\user\\Downloads\\Telegram Desktopfilter_tradingcount_scalp.xlsx") #HOME
 
-write.xlsx(sum_symbol, file_path1, digits = 2)
-"已經下載好產品總結"
-############################################### 計算客戶盈利 ############################################################################
+write.xlsx(filter_tradingcount_scalp, file_path, digits = 2)
 
-list_data1 <- split(data1, f = data1$`統一帳號
-master a/c`)
-sum_id <- NULL
+"改進：
+1）可以做一個exe檔案，丟file進去
+i.如果丟多個file?
 
-for (i in 1:length(list_data1)) {
-  
-  cat(i, "/", length(list_data1), "\n")
-  
-  tem <- list_data1[[i]]
-  tem1 <- cbind(tem[1,1],sum(tem$SUM))
-  sum_id <- rbind(sum_id, tem1)
-}
-colnames(sum_id) <- c("交易帳號", "總盈利")
-sum_id <- as.data.frame(sum_id)
-sum_id[,2] <- as.numeric(sum_id[,2]) %>% round(digits = 2)
-sum_id <- sum_id[order(sum_id[,2], decreasing = T),]  
-
-data_with_great_profit <- sum_id[sum_id$總盈利> profit,]
-colnames(data_with_great_profit) <- c("ID", "總盈利")
-file_path1 <- "D:\\Users\\marshaw.tan\\Downloads\\BT_客戶盈利.xlsx"
-
-write.xlsx(data_with_great_profit, file_path1, digits = 2)
-"已經下載好客戶總結"
-
-####################################################################################################################################################
-#
-#                                             3個月存款客戶資料
-#
-################################################################################################################################################
-
-setwd("D:\\Users\\marshaw.tan\\Downloads") #Company
-
-# 选择文件并返回文件路径
-"打開BT_ID_Profit尋找客戶
-3個月存款報表:"
-file_path <- file.choose()
-
-# 检查是否选择了文件
-if (!is.null(file_path)) {
-  # 打开文件
-  file <- file(file_path, "r")
-  # 读取文件内容
-  file_contents <- readLines(file)
-  # 输出文件内容
-  cat(file_contents, sep = "\n")
-  # 关闭文件
-  close(file)
-} else {
-  # 用户取消了文件选择
-  cat("未选择文件。\n")
-}
-
-data_3month_deposit <- readxl::read_excel(file_path)
-colnames_deposit <- data_3month_deposit[1,]
-colnames(data_3month_deposit) <- colnames_deposit
-data_3month_deposit <- data_3month_deposit[2:nrow(data_3month_deposit),]
-data_3month_deposit <- data_3month_deposit[,c("帳號\ntrading a/c","收入\nrevenue")]
-data_3month_deposit <- data_3month_deposit %>% na.omit()
-
-list_3month_deposit <- split(data_3month_deposit, f = data_3month_deposit$`帳號
-trading a/c`)
-report_3month_deposit <- NULL
-for (i in 1:length(list_3month_deposit)) {
-  
-  cat("存款三個月:", i, "/", length(list_3month_deposit), "\n")
-  
-  tem <- list_3month_deposit[[i]] %>% as.data.frame()
-  tem[,2] <- as.numeric(tem[,2])
-  temsum <- sum(tem[,2])
-  temid <- tem[1,1]
-  temdata <- cbind(temid,temsum)
-  report_3month_deposit <- rbind(report_3month_deposit, temdata)
-  
-}
-colnames(report_3month_deposit) <- c("ID","存款")
-
-####################################################################################################################################################
-#
-#                                             3個月盈利客戶資料
-#
-################################################################################################################################################
-# 选择文件并返回文件路径
-"3個月盈利報表:"
-file_path <- file.choose()
-
-# 检查是否选择了文件
-if (!is.null(file_path)) {
-  # 打开文件
-  file <- file(file_path, "r")
-  # 读取文件内容
-  file_contents <- readLines(file)
-  # 输出文件内容
-  cat(file_contents, sep = "\n")
-  # 关闭文件
-  close(file)
-} else {
-  # 用户取消了文件选择
-  cat("未选择文件。\n")
-}
-
-data_3month_profit <- readxl::read_excel(file_path)
-colnames_profit <- data_3month_profit[1,]
-colnames(data_3month_profit) <- colnames_profit
-data_3month_profit <- data_3month_profit[2:nrow(data_3month_profit),]
-data_3month_profit <- data_3month_profit[,c("帳號\ntrading a/c","收入\nrevenue","支出\nexpense")]
-data_3month_profit <- data_3month_profit %>% na.omit()
-
-list_3month_profit <- split(data_3month_profit, f = data_3month_profit$`帳號
-trading a/c`)
-report_3month_profit <- NULL
-for (i in 1:length(list_3month_profit)) {
-  
-  cat("獲利三個月:", i, "/", length(list_3month_profit), "\n")
-  
-  tem <- list_3month_profit[[i]] %>% as.data.frame()
-  tem[,2] <- as.numeric(tem[,2])
-  tem[,3] <- as.numeric(tem[,3])
-  temsum <- sum(tem[,2],tem[,3])
-  temid <- tem[1,1]
-  temdata <- cbind(temid,temsum)
-  report_3month_profit <- rbind(report_3month_profit, temdata)
-  
-}
-colnames(report_3month_profit) <- c("ID","三個月盈利")
-
-####################################################################################################################################################
-#
-#                                             盈利客戶持倉資料
-#
-################################################################################################################################################
-# 选择文件并返回文件路径
-"持倉報表:"
-file_path <- file.choose()
-
-# 检查是否选择了文件
-if (!is.null(file_path)) {
-  # 打开文件
-  file <- file(file_path, "r")
-  # 读取文件内容
-  file_contents <- readLines(file)
-  # 输出文件内容
-  cat(file_contents, sep = "\n")
-  # 关闭文件
-  close(file)
-} else {
-  # 用户取消了文件选择
-  cat("未选择文件。\n")
-}
-
-data_OI <- readxl::read_excel(file_path)
-colnames_OI <- data_OI[1,]
-colnames(data_OI) <- colnames_OI
-data_OI <- data_OI[2:nrow(data_OI),]
-data_OI <- data_OI[,c("交易帳號\ntrading a/c","浮動盈虧\nfloating p/l")]
-n <- nrow(data_OI) -1
-data_OI <- data_OI[1:n,]
-
-list_OI <- split(data_OI, f = data_OI$`交易帳號
-trading a/c`)
-report_OI <- NULL
-for (i in 1:length(list_OI)) {
-  
-  cat("持倉狀態:", i, "/", length(list_OI), "\n")
-  
-  tem <- list_OI[[i]] %>% as.data.frame()
-  tem[,2] <- as.numeric(tem[,2])
-  temsum <- sum(tem[,2])
-  temid <- tem[1,1]
-  temdata <- cbind(temid,temsum)
-  report_OI <- rbind(report_OI, temdata)
-  
-}
-colnames(report_OI) <- c("ID","浮動盈虧")
-n <- nrow(data_with_great_profit) - nrow(report_OI)
-
-####################################################################################################################################################
-#
-#                                             BTCC總和報表 再導出
-#
-################################################################################################################################################
-merged_df <- merge(data_with_great_profit, report_OI, by = "ID", all = TRUE)
-merged_df <- merge(merged_df, report_3month_profit, by = "ID", all = TRUE)
-merged_df <- merge(merged_df, report_3month_deposit, by = "ID", all = TRUE)
-data_report <- merged_df
-data_report[is.na(data_report)] <- 0
-data_report <- data_report[,c(1,2,4,5,3)]
-data_report[,3] <- data_report[,3] %>% as.numeric() %>% round(digits = 2) #進位到小數二位
-ROI_3month <- data_report$三個月盈利 %>% as.numeric() / data_report$存款 %>% as.numeric()
-# 将数值转换为百分比并保留一位小数
-ROI_3month <- sprintf("%.2f%%", ROI_3month * 100)
-
-profit_now <- data_report[,3] %>% as.numeric() + data_report[,5] %>% as.numeric()
-data_report <- cbind(data_report[,c(1:4)],ROI_3month,data_report[,5],profit_now)
-colnames(data_report) <- c("ID","值班盈利", "三個月盈利", "存款","3month ROI","浮動盈虧", "floating+3個月盈利")
-data_report <- data_report[order(data_report$ID, decreasing = T ),]
-data_report <- data_report[2:nrow(data_report),] #去掉Total
-data_report1 <- data_report[data_report[,5]>0,]
-data_report1 <- data_report1[order(data_report1$`3month ROI`, decreasing = T ),]
-
-data_high_return <- readxl::read_excel("必拓BT關注名單.xlsx")
-data_high_return <- data_high_return[,c(3,1)]
-
-colnames(data_high_return) <- c("ID","風險等級")
-merged_data <- merge(data_report1, data_high_return, by = "ID", all.x = T)
-data_report1 <- merged_data
-
-file_path1 <- "D:\\Users\\marshaw.tan\\Downloads\\BT_值班客戶盈利.xlsx"
-write.xlsx(data_report1, file_path1, digits = 2)
-"已經下載好BT總和報表"
+2)exe檔案可以開出一個窗口設定條件: 1. 盈利達多少以上，2. 剝頭皮次數要多少次以上，3. 持倉時間要多久以内"
 
 
-
-
+"程式結束, 檔名:filter_tradingcount_scalp.xlsx, 位置:D:\\Users\\marshaw.tan\\Downloads"
