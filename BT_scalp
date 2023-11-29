@@ -20,7 +20,7 @@ library(dplyr)
 ############################################### 先選擇參數 ############################################################################
 scalping_count <- 2 ##剝頭皮次數 
 profit <- 100 #最小盈利
-position_holding_time <- 5 #持倉最多要多少分鐘？
+position_holding_time <- 10 #持倉最多要多少分鐘？
 scalping_value <-  0.2#剝頭皮比率, 剝頭皮占交易次數
 
 ############################################### 載入資料 ############################################################################
@@ -233,8 +233,13 @@ filter_tradingcount_scalp <- filter_tradingcount_scalp[filter_tradingcount_scalp
 filter_tradingcount_scalp <- filter_tradingcount_scalp[order(filter_tradingcount_scalp$盈利, decreasing = T),]
 filter_tradingcount_scalp[,5] <- round(filter_tradingcount_scalp[,5], digits = 2)
 
-library(openxlsx)
+data_high_return <- readxl::read_excel("必拓BT關注名單.xlsx")
+data_high_return <- data_high_return[,c(3,1)]
 
+colnames(data_high_return) <- c("ID","風險等級")
+merged_data <- merge(filter_tradingcount_scalp, data_high_return, by = "ID", all.x = T)
+data_report1 <- merged_data
+data_report1 <- data_report1[order(data_report1$盈利, decreasing = T ),]
 # 寫入excel
 file_path <- "D:\\Users\\marshaw.tan\\Downloads\\BT_剝頭皮.xlsx"
 #file_path <- setwd("C:\\Users\\user\\Downloads\\Telegram Desktopfilter_tradingcount_scalp.xlsx") #HOME
@@ -249,3 +254,4 @@ i.如果丟多個file?
 
 
 "程式結束, 檔名:filter_tradingcount_scalp.xlsx, 位置:D:\\Users\\marshaw.tan\\Downloads"
+
